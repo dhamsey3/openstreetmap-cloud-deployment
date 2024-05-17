@@ -1,4 +1,4 @@
-## Networking ##
+# vpc.tf
 resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"
 }
@@ -27,59 +27,56 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-## RDS database ##
+# rds.tf
+resource "aws_db_subnet_group" "main" {
+  name       = "main"
+  subnet_ids = [aws_subnet.public.id]
+}
+
 resource "aws_db_instance" "postgres" {
   allocated_storage    = 20
   engine               = "postgres"
   engine_version       = "12.5"
-  instance_class       = "db.t3.micro"
+  instance_class       = var.db_instance_class
   name                 = "osmdb"
   username             = var.db_username
   password             = var.db_password
   publicly_accessible  = true
   skip_final_snapshot  = true
   db_subnet_group_name = aws_db_subnet_group.main.name
-
-  depends_on = [aws_vpc.main, aws_subnet.public]
 }
 
-resource "aws_db_subnet_group" "main" {
-  name       = "main"
-  subnet_ids = [aws_subnet.public.id]
+# elasticbeanstalk.tf
+resource "aws_elastic_beanstalk_application" "app" {
+  name        = var.app_name
+  description = "Elastic Beanstalk Application for OpenStreetMap"
 }
 
-## EC2 ##
+resource "aws_elastic_beanstalk_environment" "env" {
+  name                = var.env_name
+  application         = aws_elastic_beanstalk_application.app.name
+  solution_stack_name = "64bit Amazon Linux 2 v3.1.0 running Ruby 2.7"
 
-resource "aws_instance" "app" {
-  ami           = "ami-0c55b159cbfafe1f0" # Amazon Linux 2 AMI
-  instance_type = var.instance_type
-  subnet_id     = aws_subnet.public.id
-
-  tags = {
-    Name = "OpenStreetMap-App"
+  setting {
+    namespace = "aws:elasticbeanstalk:application:environment"
+    name      = "DATABASE_URL"
+    value     = "postgres://username:password@hostname:5432/dbname"
   }
 
-  key_name      = aws_key_pair.deployer.key_name
+  setting {
+    namespace = "aws:elasticbeanstalk:container:ruby:environment"
+    name      = "RAILS_ENV"
+    value     = "production"
+  }
 
-  user_data = <<-EOF
-              #!/bin/bash
-              yum update -y
-              yum install -y git
-              yum install -y docker
-              service docker start
-              usermod -aG docker ec2-user
-              curl -sL https://rpm.nodesource.com/setup_14.x | bash -
-              yum install -y nodejs
-              amazon-linux-extras install -y ruby2.6
-              gem install bundler
-              git clone https://github.com/openstreetmap/openstreetmap-website.git /home/ec2-user/openstreetmap-website
-              cd /home/ec2-user/openstreetmap-website
-              bundle install
-              yarn install
-              EOF
+  setting {
+    namespace = "aws:elasticbeanstalk:environment"
+    name      = "EnvironmentType"
+    value     = "LoadBalanced"
+  }
 }
 
-## SG ##
+# security_groups.tf
 resource "aws_security_group" "app_sg" {
   vpc_id = aws_vpc.main.id
 
@@ -111,9 +108,3 @@ resource "aws_security_group" "app_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
-
-resource "aws_key_pair" "deployer" {
-  key_name   = "deployer-key"
-  public_key = file("~/.ssh/id_rsa.pub")
-}
-
