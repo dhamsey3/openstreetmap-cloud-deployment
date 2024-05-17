@@ -1,49 +1,82 @@
-# OpenStreetMap Cloud Deployment
+# Terraform Configuration for OpenStreetMap Website Deployment
 
-This repository contains the source code and infrastructure configuration for deploying the OpenStreetMap website using Ruby on Rails on AWS.
+This repository contains Terraform configuration to deploy the OpenStreetMap website on AWS.
 
-## Project Overview
+## Prerequisites
 
-- **Framework:** Ruby on Rails
-- **Database:** PostgreSQL
-- **Cloud Provider:** AWS
+- [Terraform](https://www.terraform.io/downloads.html) installed on your local machine.
+- AWS CLI installed and configured with appropriate permissions.
+- An SSH key pair for EC2 access.
 
-## Features
+## Variables
 
-- User accounts, diary entries, user-to-user messaging
-- XML- and JSON-based editing API
-- Integrated iD editor
-- Browse pages for OpenStreetMap data
-- GPX uploads, browsing, and API
+The following variables need to be provided:
 
-## Setup and Deployment
+- `db_password`: The password for the PostgreSQL database.
+- `db_username`: The username for the PostgreSQL database.
+- `db_name`: The name of the PostgreSQL database.
+- `key_name`: The name of the key pair to use for SSH access.
+- `account_id`: The AWS account ID.
 
-### Prerequisites
+## Steps
 
-- AWS Account
-- Terraform installed on your local machine
-- Ruby and Rails installed on your local machine
+1. **Initialize Terraform**:
 
-### Infrastructure Setup
+    ```sh
+    terraform init
+    ```
 
-1. **Configure AWS CLI:**
+2. **Plan the Terraform Changes**:
 
-   ```sh
-   aws configure
+    ```sh
+    terraform plan -var="db_password=your_db_password" -var="db_username=your_db_username" -var="db_name=your_db_name" -var="key_name=your_key_name" -var="account_id=your_account_id"
+    ```
 
+3. **Apply the Terraform Changes**:
 
-### Initialize Terraform:
+    ```sh
+    terraform apply -var="db_password=your_db_password" -var="db_username=your_db_username" -var="db_name=your_db_name" -var="key_name=your_key_name" -var="account_id=your_account_id"
+    ```
 
-Navigate to the Terraform directory and initialize Terraform.
+Replace `your_db_password`, `your_db_username`, `your_db_name`, `your_key_name`, and `your_account_id` with your actual values.
 
-cd terraform
+## Configuration Details
 
-terraform init
+The Terraform configuration does the following:
 
-### Select or create a workspace for each environment:
+1. **VPC and Networking**:
+    - Creates a VPC.
+    - Creates a public subnet.
+    - Creates an Internet Gateway and associates it with the VPC.
+    - Creates a route table and associates it with the public subnet.
 
-terraform workspace new dev
+2. **Security Groups**:
+    - Creates a security group allowing SSH (port 22) and HTTP (port 80) access.
 
-terraform workspace new test
+3. **IAM Roles and Policies**:
+    - Creates an IAM role and policy for EC2 instances.
+    - Creates an instance profile for the IAM role.
 
-terraform workspace new prod
+4. **Secrets Management**:
+    - Creates secrets in AWS Secrets Manager for the database credentials.
+
+5. **EC2 Instance**:
+    - Launches an EC2 instance with the specified AMI, instance type, and key pair.
+    - Sets up the EC2 instance with PostgreSQL, Nginx, and the OpenStreetMap website.
+
+6. **RDS Instance**:
+    - Creates a PostgreSQL RDS instance with the provided credentials.
+
+7. **S3 Bucket**:
+    - Creates an S3 bucket for static assets with server-side encryption and lifecycle configuration.
+
+8. **CloudWatch Logs**:
+    - Sets up CloudWatch logs for monitoring the EC2 instance.
+
+## Note
+
+Ensure you have configured your AWS CLI with sufficient permissions to create the necessary resources in your AWS account.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
