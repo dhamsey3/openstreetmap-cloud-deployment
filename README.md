@@ -43,5 +43,7 @@ terraform init
 ### Select or create a workspace for each environment:
 
 terraform workspace new dev
+
 terraform workspace new test
+
 terraform workspace new prod
