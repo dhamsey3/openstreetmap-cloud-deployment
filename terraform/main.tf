@@ -91,7 +91,8 @@ resource "aws_iam_policy" "ec2_policy" {
         Action = [
           "s3:*",
           "cloudwatch:*",
-          "logs:*"
+          "logs:*",
+          "secretsmanager:GetSecretValue"
         ],
         Resource = "*"
       }
@@ -109,6 +110,31 @@ resource "aws_iam_role_policy_attachment" "ec2_role_policy_attachment" {
 resource "aws_iam_instance_profile" "ec2_instance_profile" {
   name = "ec2_instance_profile"
   role = aws_iam_role.ec2_role.name
+}
+
+# Retrieve secrets directly from AWS Secrets Manager
+data "aws_secretsmanager_secret" "db_password" {
+  name = "db_password"
+}
+
+data "aws_secretsmanager_secret_version" "db_password_version" {
+  secret_id = data.aws_secretsmanager_secret.db_password.id
+}
+
+data "aws_secretsmanager_secret" "db_username" {
+  name = "db_username"
+}
+
+data "aws_secretsmanager_secret_version" "db_username_version" {
+  secret_id = data.aws_secretsmanager_secret.db_username.id
+}
+
+data "aws_secretsmanager_secret" "db_name" {
+  name = "db_name"
+}
+
+data "aws_secretsmanager_secret_version" "db_name_version" {
+  secret_id = data.aws_secretsmanager_secret.db_name.id
 }
 
 # Create an EC2 instance
@@ -144,14 +170,20 @@ resource "aws_instance" "web" {
               sudo gem install rails
               sudo systemctl start postgresql
               sudo systemctl enable postgresql
-              sudo -u postgres psql -c "CREATE USER rails WITH PASSWORD 'password';"
-              sudo -u postgres psql -c "CREATE DATABASE openstreetmap WITH OWNER rails;"
+
+              # Retrieve secrets
+              db_password=$(aws secretsmanager get-secret-value --secret-id ${data.aws_secretsmanager_secret.db_password.id} --query SecretString --output text)
+              db_username=$(aws secretsmanager get-secret-value --secret-id ${data.aws_secretsmanager_secret.db_username.id} --query SecretString --output text)
+              db_name=$(aws secretsmanager get-secret-value --secret-id ${data.aws_secretsmanager_secret.db_name.id} --query SecretString --output text)
+
+              sudo -u postgres psql -c "CREATE USER ${db_username} WITH PASSWORD '${db_password}';"
+              sudo -u postgres psql -c "CREATE DATABASE ${db_name} WITH OWNER ${db_username};"
               cd /home/ubuntu
               git clone https://github.com/dhamsey3/openstreetmap-website.git
               cd openstreetmap-website
               bundle install
-              rails db:migrate RAILS_ENV=production
-              rails server -b 0.0.0.0 -e production
+              RAILS_ENV=production DATABASE_URL=postgresql://${db_username}:${db_password}@localhost/${db_name} rails db:migrate
+              RAILS_ENV=production DATABASE_URL=postgresql://${db_username}:${db_password}@localhost/${db_name} rails server -b 0.0.0.0
               EOF
 }
 
@@ -163,7 +195,7 @@ resource "aws_db_instance" "osm_db" {
   instance_class       = "db.t3.micro"
   #name                 = "openstreetmap"
   username             = "rails"
-  password             = var.db_password
+  password             = data.aws_secretsmanager_secret_version.db_password_version.secret_string
   vpc_security_group_ids = [aws_security_group.web_sg.id]
   db_subnet_group_name = aws_db_subnet_group.main.name
   skip_final_snapshot  = true
