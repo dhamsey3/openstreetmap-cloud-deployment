@@ -32,7 +32,16 @@ This repository contains the source code and infrastructure configuration for de
    aws configure
 
 
-   ```sh
-   terraform workspace select dev
-   terraform plan -var-file=env/dev.tfvars -out=plan-dev.out
-   terraform apply "plan-dev.out"
+### Initialize Terraform:
+
+Navigate to the Terraform directory and initialize Terraform.
+
+cd terraform
+
+terraform init
+
+### Select or create a workspace for each environment:
+
+terraform workspace new dev
+terraform workspace new test
+terraform workspace new prod
