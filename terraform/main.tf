@@ -1,11 +1,12 @@
-# vpc.tf
+## Netwrotking ##
+
 resource "aws_vpc" "main" {
-  cidr_block = "10.0.0.0/16"
+  cidr_block = var.vpc_cidr
 }
 
 resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.1.0/24"
+  cidr_block              = var.subnet_cidr
   map_public_ip_on_launch = true
 }
 
@@ -27,18 +28,18 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-# rds.tf
 resource "aws_db_subnet_group" "main" {
   name       = "main"
   subnet_ids = [aws_subnet.public.id]
 }
 
+## DB ##
 resource "aws_db_instance" "postgres" {
   allocated_storage    = 20
   engine               = "postgres"
   engine_version       = "12.5"
   instance_class       = var.db_instance_class
-  name                 = "osmdb"
+  name                 = "osmdb_${terraform.workspace}"
   username             = var.db_username
   password             = var.db_password
   publicly_accessible  = true
@@ -46,10 +47,10 @@ resource "aws_db_instance" "postgres" {
   db_subnet_group_name = aws_db_subnet_group.main.name
 }
 
-# elasticbeanstalk.tf
+## elastic beanstalk ##
 resource "aws_elastic_beanstalk_application" "app" {
   name        = var.app_name
-  description = "Elastic Beanstalk Application for OpenStreetMap"
+  description = "Elastic Beanstalk Application for OpenStreetMap (${terraform.workspace})"
 }
 
 resource "aws_elastic_beanstalk_environment" "env" {
@@ -60,7 +61,7 @@ resource "aws_elastic_beanstalk_environment" "env" {
   setting {
     namespace = "aws:elasticbeanstalk:application:environment"
     name      = "DATABASE_URL"
-    value     = "postgres://username:password@hostname:5432/dbname"
+    value     = "postgres://${var.db_username}:${var.db_password}@${aws_db_instance.postgres.endpoint}/osmdb_${terraform.workspace}"
   }
 
   setting {
@@ -76,7 +77,7 @@ resource "aws_elastic_beanstalk_environment" "env" {
   }
 }
 
-# security_groups.tf
+## sg ##
 resource "aws_security_group" "app_sg" {
   vpc_id = aws_vpc.main.id
 
