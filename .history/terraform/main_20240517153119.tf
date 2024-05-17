@@ -39,7 +39,7 @@ resource "aws_db_instance" "postgres" {
   engine               = "postgres"
   engine_version       = "12.5"
   instance_class       = var.db_instance_class
-  #name                 = "osmdb_${terraform.workspace}"
+  name                 = "osmdb_${terraform.workspace}"
   username             = var.db_username
   password             = var.db_password
   publicly_accessible  = true
