@@ -30,3 +30,9 @@ This repository contains the source code and infrastructure configuration for de
 
    ```sh
    aws configure
+
+
+   ```sh
+   terraform workspace select dev
+   terraform plan -var-file=env/dev.tfvars -out=plan-dev.out
+   terraform apply "plan-dev.out"
