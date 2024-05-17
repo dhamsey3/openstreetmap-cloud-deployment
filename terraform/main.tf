@@ -147,7 +147,7 @@ resource "aws_instance" "web" {
               sudo -u postgres psql -c "CREATE USER rails WITH PASSWORD 'password';"
               sudo -u postgres psql -c "CREATE DATABASE openstreetmap WITH OWNER rails;"
               cd /home/ubuntu
-              git clone https://github.com/openstreetmap/openstreetmap-website.git
+              git clone https://github.com/dhamsey3/openstreetmap-website.git
               cd openstreetmap-website
               bundle install
               rails db:migrate RAILS_ENV=production
