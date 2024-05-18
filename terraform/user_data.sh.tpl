@@ -28,7 +28,7 @@ sudo -u postgres psql -c "CREATE DATABASE ${db_name} WITH OWNER ${db_username};"
 
 # Clone and setup the application
 cd /home/ubuntu
-git clone https://github.com/openstreetmap/openstreetmap-website.git
+git clone https://github.com/dhamsey3/openstreetmap-website.git
 cd openstreetmap-website
 bundle install
 RAILS_ENV=production DATABASE_URL=postgresql://${db_username}:${db_password}@localhost/${db_name} rails db:migrate
