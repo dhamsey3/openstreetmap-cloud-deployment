@@ -27,13 +27,16 @@ jobs:
           aws-region: us-west-2 # Change to your preferred region
 
       - name: Initialize Terraform
-        run: terraform -chdir=terraform init
+        working-directory: terraform
+        run: terraform init
 
       - name: Plan Terraform
-        run: terraform -chdir=terraform plan -out=tfplan \
+        working-directory: terraform
+        run: terraform plan -out=tfplan \
           -var="key_name=${{ secrets.TF_VAR_key_name }}" \
           -var="account_id=${{ secrets.TF_VAR_account_id }}"
 
       # Uncomment the following step when you're ready to apply the changes
       # - name: Apply Terraform
-      #   run: terraform -chdir=terraform apply -auto-approve tfplan
+      #   working-directory: terraform
+      #   run: terraform apply -auto-approve tfplan
