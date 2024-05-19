@@ -120,12 +120,6 @@ resource "aws_iam_instance_profile" "ec2_instance_profile" {
   role = aws_iam_role.ec2_role.name
 }
 
-# Create a Key Pair
-resource "aws_key_pair" "deployer" {
-  key_name   = var.key_name
-  public_key = file("~/.ssh/id_rsa.pub") # Path to your public key file
-}
-
 # Create Secrets in AWS Secrets Manager
 resource "aws_secretsmanager_secret" "db_password" {
   name        = "db_password"
