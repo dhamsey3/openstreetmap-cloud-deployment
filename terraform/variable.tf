@@ -1,7 +1,6 @@
 variable "key_name" {
-  description = "The name of the key pair to use for SSH access"
+  description = "Name of the SSH key pair"
   type        = string
-  default     = "MyKeyPair"  # Set your default key pair name here
 }
 
 variable "account_id" {
