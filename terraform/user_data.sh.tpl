@@ -32,4 +32,32 @@ git clone https://github.com/dhamsey3/openstreetmap-website.git
 cd openstreetmap-website
 bundle install
 RAILS_ENV=production DATABASE_URL=postgresql://${db_username}:${db_password}@localhost/${db_name} rails db:migrate
-RAILS_ENV=production DATABASE_URL=postgresql://${db_username}:${db_password}@localhost/${db_name} rails server -b 0.0.0.0
+
+# Configure Nginx as a reverse proxy
+sudo tee /etc/nginx/sites-available/default > /dev/null <<EOF
+server {
+    listen 80;
+    server_name _;
+    
+    root /home/ubuntu/openstreetmap-website/public;
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    error_page 500 502 503 504 /50x.html;
+    location = /50x.html {
+        root /usr/share/nginx/html;
+    }
+}
+EOF
+
+# Restart Nginx to apply configuration
+sudo systemctl restart nginx
+
+# Start the Rails server
+RAILS_ENV=production DATABASE_URL=postgresql://${db_username}:${db_password}@localhost/${db_name} rails server -b 127.0.0.1 -p 3000
