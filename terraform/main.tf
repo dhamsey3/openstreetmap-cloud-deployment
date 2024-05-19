@@ -27,14 +27,14 @@ resource "aws_subnet" "public_subnet_1" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = "10.0.3.0/24" 
   map_public_ip_on_launch = true
-  availability_zone       = "us-west-2a"
+  availability_zone       = "eu-central-1a"
 }
 
 resource "aws_subnet" "public_subnet_2" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = "10.0.4.0/24" 
   map_public_ip_on_launch = true
-  availability_zone       = "us-west-2b"
+  availability_zone       = "eu-central-1b"
 }
 
 # Create an internet gateway
@@ -140,19 +140,26 @@ resource "aws_iam_instance_profile" "ec2_instance_profile" {
   role = aws_iam_role.ec2_role.name
 }
 
-# Create Secrets in AWS Secrets Manager
+# Create a random string for unique suffix
+resource "random_string" "suffix" {
+  length  = 8
+  special = false
+  upper   = false
+}
+
+# Create Secrets in AWS Secrets Manager with unique names
 resource "aws_secretsmanager_secret" "db_password" {
-  name        = "db_password"
+  name        = "db_password_${random_string.suffix.result}"
   description = "The database password"
 }
 
 resource "aws_secretsmanager_secret" "db_username" {
-  name        = "db_username"
+  name        = "db_username_${random_string.suffix.result}"
   description = "The database username"
 }
 
 resource "aws_secretsmanager_secret" "db_name" {
-  name        = "db_name"
+  name        = "db_name_${random_string.suffix.result}"
   description = "The database name"
 }
 
@@ -184,12 +191,13 @@ data "aws_secretsmanager_secret_version" "db_name" {
   secret_id = aws_secretsmanager_secret.db_name.id
 }
 
+
 # Create an EC2 instance
 resource "aws_instance" "web" {
-  ami                    = "ami-04ff98ccbfa41c9ad" # 
-  instance_type          = "t2.micro"
+  ami                    = "ami-08188dffd130a1ac2" # 
+  instance_type          = "t3.micro"
   subnet_id              = aws_subnet.public_subnet_1.id
-  security_groups        = [aws_security_group.web_sg.name]
+  vpc_security_group_ids = [aws_security_group.web_sg.id]
   key_name               = aws_key_pair.deployer.key_name
   iam_instance_profile   = aws_iam_instance_profile.ec2_instance_profile.name
 
@@ -214,6 +222,7 @@ resource "aws_db_subnet_group" "main" {
     aws_subnet.public_subnet_2.id
   ]
 }
+
 
 # Create an RDS instance
 resource "aws_db_instance" "osm_db" {
