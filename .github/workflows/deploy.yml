@@ -26,14 +26,13 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-west-2 # Change to your preferred region
 
-      - name: Initialize Terraform
-        run: terraform -chdir=terraform init
+      - name: Set executable permissions
+        run: chmod +x scripts/terraform_deploy.sh
 
-      - name: Plan Terraform
-        run: terraform -chdir=terraform plan -out=tfplan \
-          -var="key_name=${{ secrets.TF_VAR_key_name }}" \
-          -var="account_id=${{ secrets.TF_VAR_account_id }}"
-
-      # Uncomment the following step when you're ready to apply the changes
-      # - name: Apply Terraform
-      #   run: terraform -chdir=terraform apply -auto-approve tfplan
+      - name: Run Terraform Deployment
+        run: ./scripts/terraform_deploy.sh \
+          ${{ secrets.TF_VAR_key_name }} \
+          ${{ secrets.TF_VAR_account_id }} \
+          ${{ secrets.TF_VAR_db_password }} \
+          ${{ secrets.TF_VAR_db_username }} \
+          ${{ secrets.TF_VAR_db_name }}
