@@ -1,3 +1,10 @@
+
+resource "random_string" "bucket_suffix" {
+  length  = 8
+  special = false
+  upper   = false
+} 
+
 # Create a VPC
 resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"
@@ -16,10 +23,18 @@ resource "aws_key_pair" "deployer" {
 }
 
 # Create subnets
-resource "aws_subnet" "public_subnet" {
+resource "aws_subnet" "public_subnet_1" {
   vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.1.0/24"
+  cidr_block              = "10.0.3.0/24" 
   map_public_ip_on_launch = true
+  availability_zone       = "us-west-2a"
+}
+
+resource "aws_subnet" "public_subnet_2" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.0.4.0/24" 
+  map_public_ip_on_launch = true
+  availability_zone       = "us-west-2b"
 }
 
 # Create an internet gateway
@@ -37,9 +52,14 @@ resource "aws_route_table" "public_rt" {
   }
 }
 
-# Associate the route table with the public subnet
-resource "aws_route_table_association" "public_rt_assoc" {
-  subnet_id      = aws_subnet.public_subnet.id
+# Associate the route table with the public subnets
+resource "aws_route_table_association" "public_rt_assoc_1" {
+  subnet_id      = aws_subnet.public_subnet_1.id
+  route_table_id = aws_route_table.public_rt.id
+}
+
+resource "aws_route_table_association" "public_rt_assoc_2" {
+  subnet_id      = aws_subnet.public_subnet_2.id
   route_table_id = aws_route_table.public_rt.id
 }
 
@@ -168,44 +188,63 @@ data "aws_secretsmanager_secret_version" "db_name" {
 resource "aws_instance" "web" {
   ami                    = "ami-04ff98ccbfa41c9ad" # 
   instance_type          = "t2.micro"
-  subnet_id              = aws_subnet.public_subnet.id
+  subnet_id              = aws_subnet.public_subnet_1.id
   security_groups        = [aws_security_group.web_sg.name]
   key_name               = aws_key_pair.deployer.key_name
   iam_instance_profile   = aws_iam_instance_profile.ec2_instance_profile.name
 
   user_data = templatefile("user_data.sh.tpl", {
-    db_username = jsondecode(data.aws_secretsmanager_secret_version.db_username.secret_string)["db_username"],
-    db_password = jsondecode(data.aws_secretsmanager_secret_version.db_password.secret_string)["db_password"],
-    db_name     = jsondecode(data.aws_secretsmanager_secret_version.db_name.secret_string)["db_name"]
+    db_username = data.aws_secretsmanager_secret_version.db_username.secret_string,
+    db_password = data.aws_secretsmanager_secret_version.db_password.secret_string,
+    db_name     = data.aws_secretsmanager_secret_version.db_name.secret_string
   })
+
+  depends_on = [
+    aws_iam_instance_profile.ec2_instance_profile,
+    aws_subnet.public_subnet_1,
+    aws_security_group.web_sg
+  ]
+}
+
+# Create a DB subnet group
+resource "aws_db_subnet_group" "main" {
+  name       = "main"
+  subnet_ids = [
+    aws_subnet.public_subnet_1.id,
+    aws_subnet.public_subnet_2.id
+  ]
 }
 
 # Create an RDS instance
 resource "aws_db_instance" "osm_db" {
   allocated_storage      = 20
   engine                 = "postgres"
-  engine_version         = "13.3"
+  engine_version         = "13.15"
   instance_class         = "db.t3.micro"
-  identifier             = "openstreetmap-db" # Specify a unique identifier for the instance
-  username               = jsondecode(data.aws_secretsmanager_secret_version.db_username.secret_string)["db_username"]
-  password               = jsondecode(data.aws_secretsmanager_secret_version.db_password.secret_string)["db_password"]
-  db_name                = jsondecode(data.aws_secretsmanager_secret_version.db_name.secret_string)["db_name"]
+  identifier             = "openstreetmapdb"
+  username               = data.aws_secretsmanager_secret_version.db_username.secret_string
+  password               = data.aws_secretsmanager_secret_version.db_password.secret_string
+  db_name                = data.aws_secretsmanager_secret_version.db_name.secret_string
   vpc_security_group_ids = [aws_security_group.web_sg.id]
   db_subnet_group_name   = aws_db_subnet_group.main.name
   skip_final_snapshot    = true
+
+  timeouts {
+    create = "30m"
+    update = "30m"
+    delete = "30m"
+  }
+
+  depends_on = [
+    aws_db_subnet_group.main,
+    aws_security_group.web_sg
+  ]
 }
 
-
-# Create a DB subnet group
-resource "aws_db_subnet_group" "main" {
-  name       = "main"
-  subnet_ids = [aws_subnet.public_subnet.id]
-}
 
 # Create an S3 bucket for static assets
 resource "aws_s3_bucket" "static_assets" {
   bucket = "openstreetmap-static-assets"
-  acl    = "public-read"
 
   versioning {
     enabled = true
@@ -234,6 +273,37 @@ resource "aws_s3_bucket_lifecycle_configuration" "static_assets_lifecycle" {
     }
   }
 }
+
+resource "aws_iam_policy" "s3_policy" {
+  name        = "s3_policy"
+  description = "Policy for managing S3 buckets"
+  policy      = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "s3:CreateBucket",
+          "s3:ListBucket",
+          "s3:GetBucketLocation",
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:DeleteObject",
+          "s3:PutBucketPolicy",
+          "s3:PutBucketPublicAccessBlock",
+          "s3:PutEncryptionConfiguration"
+        ],
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "attach_s3_policy" {
+  role       = aws_iam_role.ec2_role.name
+  policy_arn = aws_iam_policy.s3_policy.arn
+}
+
 
 # CloudWatch monitoring for EC2 instance
 resource "aws_cloudwatch_log_group" "web_log_group" {
