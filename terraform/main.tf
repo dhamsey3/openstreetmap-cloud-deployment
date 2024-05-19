@@ -3,6 +3,18 @@ resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"
 }
 
+# Generate an SSH key pair
+resource "tls_private_key" "deployer" {
+  algorithm = "RSA"
+  rsa_bits  = 2048
+}
+
+# Create an AWS key pair using the generated public key
+resource "aws_key_pair" "deployer" {
+  key_name   = var.key_name
+  public_key = tls_private_key.deployer.public_key_openssh
+}
+
 # Create subnets
 resource "aws_subnet" "public_subnet" {
   vpc_id                  = aws_vpc.main.id
