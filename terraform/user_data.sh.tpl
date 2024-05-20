@@ -1,63 +1,89 @@
 #!/bin/bash
-sudo apt-get update
-sudo apt-get install -y ruby-full
-sudo apt-get install -y build-essential
-sudo apt-get install -y libssl-dev
-sudo apt-get install -y zlib1g-dev
-sudo apt-get install -y libreadline-dev
-sudo apt-get install -y libyaml-dev
-sudo apt-get install -y libsqlite3-dev
-sudo apt-get install -y sqlite3
-sudo apt-get install -y libxml2-dev
-sudo apt-get install -y libxslt1-dev
-sudo apt-get install -y libcurl4-openssl-dev
-sudo apt-get install -y software-properties-common
-sudo apt-get install -y libffi-dev
-sudo apt-get install -y git
-sudo apt-get install -y postgresql postgresql-contrib
-sudo apt-get install -y nginx
-curl -sL https://deb.nodesource.com/setup_12.x | sudo -E bash -
-sudo apt-get install -y nodejs
-sudo gem install rails
-sudo systemctl start postgresql
-sudo systemctl enable postgresql
+set -e
 
-# Create PostgreSQL user and database
-sudo -u postgres psql -c "CREATE USER ${db_username} WITH PASSWORD '${db_password}';"
-sudo -u postgres psql -c "CREATE DATABASE ${db_name} WITH OWNER ${db_username};"
+# Redirect all output to a log file
+exec > /var/log/user-data.log 2>&1
 
-# Clone and setup the application
-cd /home/ubuntu
+echo "Starting user data script"
+
+# Update the package repository
+echo "Updating package repository"
+sudo yum update -y
+
+# Install Docker
+echo "Installing Docker"
+sudo amazon-linux-extras install docker -y
+sudo service docker start
+sudo usermod -a -G docker ec2-user
+
+# Ensure Docker starts on boot
+echo "Enabling Docker to start on boot"
+sudo systemctl enable docker
+
+# Install Docker Compose
+echo "Installing Docker Compose"
+mkdir -p ~/.docker/cli-plugins/
+curl -SL https://github.com/docker/compose/releases/download/v2.11.1/docker-compose-linux-x86_64 -o ~/.docker/cli-plugins/docker-compose
+chmod +x ~/.docker/cli-plugins/docker-compose
+
+# Install Git
+echo "Installing Git"
+sudo yum install git -y
+
+# Clone your application repository
+echo "Cloning application repository"
+cd /home/ec2-user
 git clone https://github.com/dhamsey3/openstreetmap-website.git
+
+# Change to the application directory
 cd openstreetmap-website
-bundle install
-RAILS_ENV=production DATABASE_URL=postgresql://${db_username}:${db_password}@localhost/${db_name} rails db:migrate
 
-# Configure Nginx as a reverse proxy
-sudo tee /etc/nginx/sites-available/default > /dev/null <<EOF
-server {
-    listen 80;
-    server_name _;
-    
-    root /home/ubuntu/openstreetmap-website/public;
+# Create Docker configuration files
 
-    location / {
-        proxy_pass http://localhost:3000;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
+# Dockerfile
+cat <<'EOF_DOCKERFILE' > Dockerfile
+FROM ruby:2.7
+ENV RAILS_ENV production
+ENV DATABASE_URL postgresql://${db_username}:${db_password}@db:5432/${db_name}
+RUN apt-get update -qq && apt-get install -y build-essential libpq-dev nodejs
+RUN mkdir /openstreetmap-website
+WORKDIR /openstreetmap-website
+COPY Gemfile /openstreetmap-website/Gemfile
+COPY Gemfile.lock /openstreetmap-website/Gemfile.lock
+RUN bundle install
+COPY . /openstreetmap-website
+RUN bundle exec rake assets:precompile
+CMD ["rails", "server", "-b", "0.0.0.0"]
+EOF_DOCKERFILE
 
-    error_page 500 502 503 504 /50x.html;
-    location = /50x.html {
-        root /usr/share/nginx/html;
-    }
-}
-EOF
+# docker-compose.yml
+cat <<'EOF_DOCKERCOMPOSE' > docker-compose.yml
+version: '3.8'
+services:
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: ${db_username}
+      POSTGRES_PASSWORD: ${db_password}
+      POSTGRES_DB: ${db_name}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
 
-# Restart Nginx to apply configuration
-sudo systemctl restart nginx
+  web:
+    build: .
+    command: bundle exec rails s -b '0.0.0.0' -p 3000
+    volumes:
+      - .:/openstreetmap-website
+    ports:
+      - "80:3000"
+    depends_on:
+      - db
 
-# Start the Rails server
-RAILS_ENV=production DATABASE_URL=postgresql://${db_username}:${db_password}@localhost/${db_name} rails server -b 127.0.0.1 -p 3000
+volumes:
+  postgres-data:
+EOF_DOCKERCOMPOSE
+
+# Start Docker Compose
+sudo /home/ec2-user/.docker/cli-plugins/docker-compose up -d
+
+echo "User data script completed"
