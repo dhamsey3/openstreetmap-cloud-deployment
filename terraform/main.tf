@@ -1,4 +1,12 @@
 
+locals {
+  user_data = templatefile("user_data.sh.tpl", {
+    db_username = data.aws_secretsmanager_secret_version.db_username.secret_string,
+    db_password = data.aws_secretsmanager_secret_version.db_password.secret_string,
+    db_name     = data.aws_secretsmanager_secret_version.db_name.secret_string
+  })
+}
+
 resource "random_string" "bucket_suffix" {
   length  = 8
   special = false
@@ -194,18 +202,14 @@ data "aws_secretsmanager_secret_version" "db_name" {
 
 # Create an EC2 instance
 resource "aws_instance" "web" {
-  ami                    = "ami-08188dffd130a1ac2" # 
+  ami                    = "ami-08188dffd130a1ac2"
   instance_type          = "t3.micro"
   subnet_id              = aws_subnet.public_subnet_1.id
   vpc_security_group_ids = [aws_security_group.web_sg.id]
   key_name               = aws_key_pair.deployer.key_name
   iam_instance_profile   = aws_iam_instance_profile.ec2_instance_profile.name
 
-  user_data = templatefile("user_data.sh.tpl", {
-    db_username = data.aws_secretsmanager_secret_version.db_username.secret_string,
-    db_password = data.aws_secretsmanager_secret_version.db_password.secret_string,
-    db_name     = data.aws_secretsmanager_secret_version.db_name.secret_string
-  })
+  user_data = local.user_data
 
   depends_on = [
     aws_iam_instance_profile.ec2_instance_profile,
