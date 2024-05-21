@@ -1,4 +1,4 @@
-name: Deploy OpenStreetMap Website
+name: Plan Terraform Deployment
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
 
 jobs:
   terraform:
-    name: Terraform Plan and Apply
+    name: Terraform Plan
     runs-on: ubuntu-latest
 
     steps:
@@ -29,7 +29,7 @@ jobs:
       - name: Set executable permissions
         run: chmod +x scripts/terraform_deploy.sh
 
-      - name: Run Terraform Deployment
+      - name: Run Terraform Plan
         run: ./scripts/terraform_deploy.sh \
           ${{ secrets.TF_VAR_key_name }} \
           ${{ secrets.TF_VAR_account_id }} \
