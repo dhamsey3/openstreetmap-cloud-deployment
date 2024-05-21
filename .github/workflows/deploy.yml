@@ -24,14 +24,13 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-central-1 # Change to your preferred region
+          aws-region: us-west-2 # Change to your preferred region
 
       - name: Set executable permissions
-        run: chmod +x terraform/scripts/terraform_deploy.sh
+        run: chmod +x scripts/terraform_deploy.sh
 
       - name: Run Terraform Plan
-        working-directory: terraform
-        run: ../scripts/terraform_deploy.sh \
+        run: ./scripts/terraform_deploy.sh \
           ${{ secrets.TF_VAR_key_name }} \
           ${{ secrets.TF_VAR_account_id }} \
           ${{ secrets.TF_VAR_db_password }} \
