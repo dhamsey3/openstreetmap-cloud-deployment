@@ -3,8 +3,8 @@
 # Ensure the script exits if any command fails
 set -e
 
-# Navigate to the terraform directory
-cd "$(dirname "$0")/../terraform" || { echo "Cannot find the terraform directory"; exit 1; }
+# Navigate to the root directory where the Terraform files are located
+cd "$(dirname "$0")/.."
 
 # Initialize Terraform
 terraform init
