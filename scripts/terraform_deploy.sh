@@ -17,3 +17,4 @@ terraform plan -var "key_name=${KEY_NAME}" \
                -var "db_password=${DB_PASSWORD}" \
                -var "db_username=${DB_USERNAME}" \
                -var "db_name=${DB_NAME}"
+
