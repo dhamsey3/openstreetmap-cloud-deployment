@@ -16,6 +16,12 @@ jobs:
     - name: Set up Terraform
       uses: hashicorp/setup-terraform@v1
 
+    - name: Print current directory and list files
+      run: |
+        pwd
+        ls -la
+        ls -la ./scripts
+
     - name: Make terraform_deploy.sh executable
       run: chmod +x ./scripts/terraform_deploy.sh
 
