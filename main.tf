@@ -218,15 +218,18 @@ resource "aws_instance" "web" {
   ]
 }
 
-# Create a DB subnet group
+# Create a DB subnet group with a unique name
 resource "aws_db_subnet_group" "main" {
-  name       = "main"
+  name       = "main-${random_string.suffix.result}"
   subnet_ids = [
     aws_subnet.public_subnet_1.id,
     aws_subnet.public_subnet_2.id
   ]
-}
 
+  tags = {
+    Name = "main-${random_string.suffix.result}"
+  }
+}
 
 # Create an RDS instance
 resource "aws_db_instance" "osm_db" {
