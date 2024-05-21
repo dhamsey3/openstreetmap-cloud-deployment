@@ -27,10 +27,11 @@ jobs:
           aws-region: eu-central-1 # Change to your preferred region
 
       - name: Set executable permissions
-        run: chmod +x scripts/terraform_deploy.sh
+        run: chmod +x terraform/scripts/terraform_deploy.sh
 
       - name: Run Terraform Plan
-        run: ./scripts/terraform_deploy.sh \
+        working-directory: terraform
+        run: ../scripts/terraform_deploy.sh \
           ${{ secrets.TF_VAR_key_name }} \
           ${{ secrets.TF_VAR_account_id }} \
           ${{ secrets.TF_VAR_db_password }} \
