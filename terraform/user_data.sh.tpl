@@ -8,20 +8,25 @@ echo "Starting user data script"
 
 # Update the package repository
 echo "Updating package repository"
-sudo apt-get update -y
+sudo yum update -y
 
 # Install dependencies
 echo "Installing dependencies"
-sudo apt-get install -y curl git-core zlib1g-dev build-essential libssl-dev libreadline-dev libyaml-dev libsqlite3-dev sqlite3 libxml2-dev libxslt1-dev libcurl4-openssl-dev software-properties-common libffi-dev nodejs yarn
+sudo yum install -y curl git zlib-devel gcc-c++ patch readline readline-devel libyaml-devel libffi-devel openssl-devel make bzip2 autoconf automake libtool bison iconv-devel libxml2-devel libxslt-devel sqlite-devel nodejs
 
 # Install Node.js
-curl -sL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
-sudo apt-get install -y nodejs
+curl -sL https://rpm.nodesource.com/setup_lts.x | sudo -E bash -
+sudo yum install -y nodejs
 
 # Install Yarn
-curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
-echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
-sudo apt-get update && sudo apt-get install -y yarn
+curl -sS https://dl.yarnpkg.com/rpm/pubkey.gpg | sudo rpm --import -
+echo "[yarn]
+name=Yarn Repository
+baseurl=https://dl.yarnpkg.com/rpm/
+enabled=1
+gpgcheck=1
+gpgkey=https://dl.yarnpkg.com/rpm/pubkey.gpg" | sudo tee /etc/yum.repos.d/yarn.repo
+sudo yum install -y yarn
 
 # Install rbenv
 echo "Installing rbenv"
@@ -29,10 +34,10 @@ cd
 git clone https://github.com/rbenv/rbenv.git ~/.rbenv
 echo 'export PATH="$HOME/.rbenv/bin:$PATH"' >> ~/.bashrc
 echo 'eval "$(rbenv init -)"' >> ~/.bashrc
-exec $SHELL
+source ~/.bashrc
 git clone https://github.com/rbenv/ruby-build.git ~/.rbenv/plugins/ruby-build
 echo 'export PATH="$HOME/.rbenv/plugins/ruby-build/bin:$PATH"' >> ~/.bashrc
-exec $SHELL
+source ~/.bashrc
 
 # Install Ruby and Bundler
 echo "Installing Ruby"
@@ -49,7 +54,7 @@ rails -v
 
 # Clone your application repository
 echo "Cloning application repository"
-cd /home/ubuntu
+cd /home/ec2-user
 git clone https://github.com/dhamsey3/openstreetmap-website.git
 
 # Change to the application directory
@@ -105,10 +110,10 @@ EOF_DOCKERCOMPOSE
 
 # Install Docker
 echo "Installing Docker"
-sudo apt-get install -y docker.io
-sudo systemctl start docker
+sudo amazon-linux-extras install docker -y
+sudo service docker start
 sudo systemctl enable docker
-sudo usermod -aG docker ubuntu
+sudo usermod -aG docker ec2-user
 
 # Install Docker Compose
 echo "Installing Docker Compose"
@@ -117,16 +122,16 @@ curl -SL https://github.com/docker/compose/releases/download/v2.11.1/docker-comp
 chmod +x ~/.docker/cli-plugins/docker-compose
 
 # Start Docker Compose
-sudo /home/ubuntu/.docker/cli-plugins/docker-compose up -d
+sudo /home/ec2-user/.docker/cli-plugins/docker-compose up -d
 
 # Install and configure Nginx
 echo "Installing and configuring Nginx"
-sudo apt-get install -y nginx
-sudo systemctl start nginx
+sudo amazon-linux-extras install nginx1.12 -y
+sudo service nginx start
 sudo systemctl enable nginx
 
 # Configure Nginx
-sudo bash -c 'cat > /etc/nginx/sites-available/default <<EOF
+sudo bash -c 'cat > /etc/nginx/nginx.conf <<EOF
 server {
     listen 80;
     server_name ${public_ipv4_dns};
