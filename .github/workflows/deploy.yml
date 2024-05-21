@@ -16,6 +16,9 @@ jobs:
     - name: Set up Terraform
       uses: hashicorp/setup-terraform@v1
 
+    - name: Make terraform_deploy.sh executable
+      run: chmod +x ./scripts/terraform_deploy.sh
+
     - name: Run Terraform Plan
       run: ./scripts/terraform_deploy.sh
       env:
