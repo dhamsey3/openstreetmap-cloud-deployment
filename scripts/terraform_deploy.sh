@@ -1,18 +1,19 @@
 #!/bin/bash
-
-# Exit immediately if a command exits with a non-zero status
 set -e
 
+# Variables from arguments
+KEY_NAME=$1
+ACCOUNT_ID=$2
+DB_PASSWORD=$3
+DB_USERNAME=$4
+DB_NAME=$5
+
 # Initialize Terraform
-terraform -chdir=terraform init
+terraform init
 
-# Plan Terraform
-terraform -chdir=terraform plan -out=tfplan \
-  -var="key_name=$1" \
-  -var="account_id=$2" \
-  -var="db_password=$3" \
-  -var="db_username=$4" \
-  -var="db_name=$5"
-
-# Uncomment the following line to apply the changes
-# terraform -chdir=terraform apply -auto-approve tfplan
+# Plan Terraform configuration
+terraform plan -var "key_name=${KEY_NAME}" \
+               -var "account_id=${ACCOUNT_ID}" \
+               -var "db_password=${DB_PASSWORD}" \
+               -var "db_username=${DB_USERNAME}" \
+               -var "db_name=${DB_NAME}"
