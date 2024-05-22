@@ -1,48 +1,183 @@
-
-locals {
-  user_data = templatefile("user_data.sh.tpl", {
-    db_username = data.aws_secretsmanager_secret_version.db_username.secret_string,
-    db_password = data.aws_secretsmanager_secret_version.db_password.secret_string,
-    db_name     = data.aws_secretsmanager_secret_version.db_name.secret_string
-  })
-}
-
+# Define a random string for unique bucket name suffix
 resource "random_string" "bucket_suffix" {
   length  = 8
   special = false
   upper   = false
-} 
+}
+
+# Define S3 bucket for application deployment
+resource "aws_s3_bucket" "app_bucket" {
+  bucket = "openstreetmap-static-assets-${random_string.bucket_suffix.result}"
+  acl    = "private"
+
+  versioning {
+    enabled = true
+  }
+
+  server_side_encryption_configuration {
+    rule {
+      apply_server_side_encryption_by_default {
+        sse_algorithm = "AES256"
+      }
+    }
+  }
+
+  lifecycle_rule {
+    id      = "expire_old_versions"
+    enabled = true
+
+    expiration {
+      expired_object_delete_marker = true
+    }
+  }
+}
+
+# Define Elastic Beanstalk Application
+resource "aws_elastic_beanstalk_application" "app" {
+  name        = "openstreetmap-app"
+  description = "Elastic Beanstalk Application for OpenStreetMap"
+}
+
+# Define Elastic Beanstalk Application Version
+resource "aws_elastic_beanstalk_application_version" "app_version" {
+  name        = "v1"
+  application = aws_elastic_beanstalk_application.app.name
+  bucket      = aws_s3_bucket.app_bucket.bucket
+  key         = "my-application.zip"
+}
+
+# Define Elastic Beanstalk Environment
+resource "aws_elastic_beanstalk_environment" "env" {
+  name                = "openstreetmap-env"
+  application         = aws_elastic_beanstalk_application.app.name
+  version_label       = aws_elastic_beanstalk_application_version.app_version.name
+  solution_stack_name = "64bit Amazon Linux 2 v5.4.4 running Ruby 2.7"
+
+  setting {
+    namespace = "aws:autoscaling:launchconfiguration"
+    name      = "IamInstanceProfile"
+    value     = aws_iam_instance_profile.eb_instance_profile.name
+  }
+
+  setting {
+    namespace = "aws:autoscaling:launchconfiguration"
+    name      = "InstanceType"
+    value     = "t3.micro"
+  }
+
+  setting {
+    namespace = "aws:autoscaling:launchconfiguration"
+    name      = "EC2KeyName"
+    value     = aws_key_pair.deployer.key_name
+  }
+
+  setting {
+    namespace = "aws:elasticbeanstalk:environment"
+    name      = "ServiceRole"
+    value     = aws_iam_role.eb_role.arn
+  }
+
+  setting {
+    namespace = "aws:elasticbeanstalk:environment"
+    name      = "VPCId"
+    value     = aws_vpc.main.id
+  }
+
+  setting {
+    namespace = "aws:ec2:vpc"
+    name      = "Subnets"
+    value     = "${aws_subnet.public_subnet_1.id},${aws_subnet.public_subnet_2.id}"
+  }
+
+  setting {
+    namespace = "aws:ec2:vpc"
+    name      = "ELBSubnets"
+    value     = "${aws_subnet.public_subnet_1.id},${aws_subnet.public_subnet_2.id}"
+  }
+
+  setting {
+    namespace = "aws:ec2:vpc"
+    name      = "VPCId"
+    value     = aws_vpc.main.id
+  }
+
+  setting {
+    namespace = "aws:ec2:vpc"
+    name      = "DBSubnets"
+    value     = "${aws_subnet.public_subnet_1.id},${aws_subnet.public_subnet_2.id}"
+  }
+
+  setting {
+    namespace = "aws:elasticbeanstalk:application:environment"
+    name      = "DATABASE_URL"
+    value     = "postgresql://${var.db_username}:${var.db_password}@${aws_db_instance.osm_db.address}/${var.db_name}"
+  }
+
+  setting {
+    namespace = "aws:elasticbeanstalk:application:environment"
+    name      = "RAILS_ENV"
+    value     = "production"
+  }
+
+  setting {
+    namespace = "aws:elasticbeanstalk:environment:process:default"
+    name      = "HealthCheckPath"
+    value     = "/"
+  }
+
+  setting {
+    namespace = "aws:elasticbeanstalk:application:environment"
+    name      = "SECRET_KEY_BASE"
+    value     = "your-secret-key-base"
+  }
+}
+
+# Define IAM Role and Policy for Elastic Beanstalk
+resource "aws_iam_role" "eb_role" {
+  name = "elasticbeanstalk-service-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Principal = {
+          Service = "elasticbeanstalk.amazonaws.com"
+        },
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "eb_role_attachment" {
+  role       = aws_iam_role.eb_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSElasticBeanstalkEnhancedHealth"
+}
+
+resource "aws_iam_instance_profile" "eb_instance_profile" {
+  name = "elasticbeanstalk-instance-profile"
+  role = aws_iam_role.eb_role.name
+}
 
 # Create a VPC
 resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"
 }
 
-# Generate an SSH key pair
-resource "tls_private_key" "deployer" {
-  algorithm = "RSA"
-  rsa_bits  = 2048
-}
-
-# Create an AWS key pair using the generated public key
-resource "aws_key_pair" "deployer" {
-  key_name   = var.key_name
-  public_key = tls_private_key.deployer.public_key_openssh
-}
-
 # Create subnets
 resource "aws_subnet" "public_subnet_1" {
   vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.3.0/24" 
+  cidr_block              = "10.0.3.0/24"
   map_public_ip_on_launch = true
-  availability_zone       = "eu-central-1a"
+  availability_zone       = "us-west-2a"
 }
 
 resource "aws_subnet" "public_subnet_2" {
   vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.4.0/24" 
+  cidr_block              = "10.0.4.0/24"
   map_public_ip_on_launch = true
-  availability_zone       = "eu-central-1b"
+  availability_zone       = "us-west-2b"
 }
 
 # Create an internet gateway
@@ -97,150 +232,16 @@ resource "aws_security_group" "web_sg" {
   }
 }
 
-# IAM Role for EC2
-resource "aws_iam_role" "ec2_role" {
-  name = "ec2_role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Effect = "Allow",
-        Principal = {
-          Service = "ec2.amazonaws.com"
-        },
-        Action = "sts:AssumeRole"
-      }
-    ]
-  })
-}
-
-# IAM Policy for EC2 Role
-resource "aws_iam_policy" "ec2_policy" {
-  name        = "ec2_policy"
-  description = "IAM policy for EC2 role"
-  policy      = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Effect = "Allow",
-        Action = [
-          "s3:*",
-          "cloudwatch:*",
-          "logs:*",
-          "secretsmanager:GetSecretValue"
-        ],
-        Resource = "*"
-      }
-    ]
-  })
-}
-
-# Attach Policy to EC2 Role
-resource "aws_iam_role_policy_attachment" "ec2_role_policy_attachment" {
-  role       = aws_iam_role.ec2_role.name
-  policy_arn = aws_iam_policy.ec2_policy.arn
-}
-
-# Create an Instance Profile for EC2 Role
-resource "aws_iam_instance_profile" "ec2_instance_profile" {
-  name = "ec2_instance_profile"
-  role = aws_iam_role.ec2_role.name
-}
-
-# Create a random string for unique suffix
-resource "random_string" "suffix" {
-  length  = 8
-  special = false
-  upper   = false
-}
-
-# Create Secrets in AWS Secrets Manager with unique names
-resource "aws_secretsmanager_secret" "db_password" {
-  name        = "db_password_${random_string.suffix.result}"
-  description = "The database password"
-}
-
-resource "aws_secretsmanager_secret" "db_username" {
-  name        = "db_username_${random_string.suffix.result}"
-  description = "The database username"
-}
-
-resource "aws_secretsmanager_secret" "db_name" {
-  name        = "db_name_${random_string.suffix.result}"
-  description = "The database name"
-}
-
-resource "aws_secretsmanager_secret_version" "db_password" {
-  secret_id     = aws_secretsmanager_secret.db_password.id
-  secret_string = var.db_password
-}
-
-resource "aws_secretsmanager_secret_version" "db_username" {
-  secret_id     = aws_secretsmanager_secret.db_username.id
-  secret_string = var.db_username
-}
-
-resource "aws_secretsmanager_secret_version" "db_name" {
-  secret_id     = aws_secretsmanager_secret.db_name.id
-  secret_string = var.db_name
-}
-
-# Retrieve Secrets from AWS Secrets Manager
-data "aws_secretsmanager_secret_version" "db_password" {
-  secret_id = aws_secretsmanager_secret.db_password.id
-}
-
-data "aws_secretsmanager_secret_version" "db_username" {
-  secret_id = aws_secretsmanager_secret.db_username.id
-}
-
-data "aws_secretsmanager_secret_version" "db_name" {
-  secret_id = aws_secretsmanager_secret.db_name.id
-}
-
-
-# Create an EC2 instance
-resource "aws_instance" "web" {
-  ami                    = "ami-08188dffd130a1ac2"
-  instance_type          = "t3.micro"
-  subnet_id              = aws_subnet.public_subnet_1.id
-  vpc_security_group_ids = [aws_security_group.web_sg.id]
-  key_name               = aws_key_pair.deployer.key_name
-  iam_instance_profile   = aws_iam_instance_profile.ec2_instance_profile.name
-
-  user_data = local.user_data
-
-  depends_on = [
-    aws_iam_instance_profile.ec2_instance_profile,
-    aws_subnet.public_subnet_1,
-    aws_security_group.web_sg
-  ]
-}
-
-# Create a DB subnet group with a unique name
-resource "aws_db_subnet_group" "main" {
-  name       = "main-${random_string.suffix.result}"
-  subnet_ids = [
-    aws_subnet.public_subnet_1.id,
-    aws_subnet.public_subnet_2.id
-  ]
-
-  tags = {
-    Name = "main-${random_string.suffix.result}"
-  }
-}
-
-# Create an RDS instance
+# Create an RDS instance for the database
 resource "aws_db_instance" "osm_db" {
   allocated_storage      = 20
   engine                 = "postgres"
   engine_version         = "13.15"
   instance_class         = "db.t3.micro"
   identifier             = "openstreetmapdb"
-  username               = data.aws_secretsmanager_secret_version.db_username.secret_string
-  password               = data.aws_secretsmanager_secret_version.db_password.secret_string
-  db_name                = data.aws_secretsmanager_secret_version.db_name.secret_string
+  username               = var.db_username
+  password               = var.db_password
+  db_name                = var.db_name
   vpc_security_group_ids = [aws_security_group.web_sg.id]
   db_subnet_group_name   = aws_db_subnet_group.main.name
   skip_final_snapshot    = true
@@ -257,77 +258,15 @@ resource "aws_db_instance" "osm_db" {
   ]
 }
 
+# Create a DB subnet group with a unique name
+resource "aws_db_subnet_group" "main" {
+  name       = "main-${random_string.bucket_suffix.result}"
+  subnet_ids = [
+    aws_subnet.public_subnet_1.id,
+    aws_subnet.public_subnet_2.id
+  ]
 
-# Create an S3 bucket for static assets
-resource "aws_s3_bucket" "static_assets" {
-  bucket = "openstreetmap-static-assets"
-
-  versioning {
-    enabled = true
+  tags = {
+    Name = "main-${random_string.bucket_suffix.result}"
   }
-}
-
-resource "aws_s3_bucket_server_side_encryption_configuration" "static_assets_sse" {
-  bucket = aws_s3_bucket.static_assets.bucket
-
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-  }
-}
-
-resource "aws_s3_bucket_lifecycle_configuration" "static_assets_lifecycle" {
-  bucket = aws_s3_bucket.static_assets.bucket
-
-  rule {
-    id     = "expire_old_versions"
-    status = "Enabled"
-
-    expiration {
-      expired_object_delete_marker = true
-    }
-  }
-}
-
-resource "aws_iam_policy" "s3_policy" {
-  name        = "s3_policy"
-  description = "Policy for managing S3 buckets"
-  policy      = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Effect = "Allow",
-        Action = [
-          "s3:CreateBucket",
-          "s3:ListBucket",
-          "s3:GetBucketLocation",
-          "s3:PutObject",
-          "s3:GetObject",
-          "s3:DeleteObject",
-          "s3:PutBucketPolicy",
-          "s3:PutBucketPublicAccessBlock",
-          "s3:PutEncryptionConfiguration"
-        ],
-        Resource = "*"
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "attach_s3_policy" {
-  role       = aws_iam_role.ec2_role.name
-  policy_arn = aws_iam_policy.s3_policy.arn
-}
-
-
-# CloudWatch monitoring for EC2 instance
-resource "aws_cloudwatch_log_group" "web_log_group" {
-  name              = "/aws/ec2/web-instance"
-  retention_in_days = 30
-}
-
-resource "aws_cloudwatch_log_stream" "web_log_stream" {
-  name           = "web-instance-logs"
-  log_group_name = aws_cloudwatch_log_group.web_log_group.name
 }
