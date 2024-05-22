@@ -17,8 +17,7 @@ jobs:
       - name: Checkout Application code
         uses: actions/checkout@v2
         with:
-          repository: your-username/your-application-repo
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          repository: dhamsey3/openstreetmap-website
           path: application
 
       - name: Set up Node.js
@@ -42,7 +41,7 @@ jobs:
           aws-region: eu-central-1
 
       - name: Upload zip to S3
-        run: aws s3 cp application/my-application.zip s3://openstreetmap-static-assets/
+        run: aws s3 cp application/my-application.zip s3://openstreetmap-static-assets-${{ secrets.S3_BUCKET_SUFFIX }}/
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v1
@@ -55,5 +54,6 @@ jobs:
       - name: Terraform Plan
         run: terraform plan
 
-      #- name: Terraform Apply
-      # run: terraform apply -auto-approve
+      # Comment out apply for now
+      # - name: Terraform Apply
+      #   run: terraform apply -auto-approve
