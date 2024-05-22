@@ -25,3 +25,6 @@ output "db_username_arn" {
 output "db_name_arn" {
   value = aws_secretsmanager_secret.db_name.arn
 }
+output "app_bucket_name" {
+  value = aws_s3_bucket.app_bucket.bucket
+}
