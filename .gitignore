@@ -1,2 +1,6 @@
 .history
 .history
+
+# Terraform artifacts
+.terraform/
+tf.plan
