@@ -25,3 +25,21 @@ variable "db_name" {
   type        = string
 }
 
+variable "region" {
+  description = "AWS region to deploy into"
+  type        = string
+  default     = "eu-central-1"
+}
+
+variable "ecr_repo_name" {
+  description = "ECR repository name for the application"
+  type        = string
+  default     = "openstreetmap-website"
+}
+
+variable "image_tag" {
+  description = "Image tag to deploy (CI will typically set this to the git SHA)"
+  type        = string
+  default     = "latest"
+}
+

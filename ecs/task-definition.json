@@ -1,0 +1,23 @@
+{
+  "family": "openstreetmap-task",
+  "networkMode": "awsvpc",
+  "containerDefinitions": [
+    {
+      "name": "web",
+      "image": "REPLACE_IMAGE",
+      "memory": 1024,
+      "cpu": 512,
+      "portMappings": [
+        { "containerPort": 3000, "hostPort": 3000 }
+      ],
+      "essential": true,
+      "environment": [
+        { "name": "RAILS_ENV", "value": "production" }
+      ]
+    }
+  ],
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "REPLACE_EXECUTION_ROLE_ARN"
+}
