@@ -1,0 +1,73 @@
+---
+# Security hardening playbook
+# Apply security best practices across infrastructure
+
+- name: Update all packages
+  apt:
+    upgrade: dist
+    update_cache: yes
+  when: ansible_os_family == "Debian"
+
+- name: Install fail2ban
+  apt:
+    name: fail2ban
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Configure fail2ban
+  template:
+    src: jail.local.j2
+    dest: /etc/fail2ban/jail.local
+    mode: '0644'
+  notify: restart fail2ban
+
+- name: Ensure SSH uses key-based authentication
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^PasswordAuthentication'
+    line: 'PasswordAuthentication no'
+    state: present
+  notify: restart sshd
+
+- name: Install and configure auditd
+  apt:
+    name: auditd
+    state: present
+
+- name: Rotate Secrets Manager secrets
+  block:
+    - name: Enable automatic rotation for DB credentials
+      community.aws.secretsmanager_secret:
+        name: openstreetmap/db_credentials
+        rotation_lambda_arn: "{{ rotation_lambda_arn }}"
+        rotation_rules:
+          automatically_after_days: 30
+        region: "{{ aws_region }}"
+  when: rotation_lambda_arn is defined
+
+- name: Scan for security vulnerabilities
+  command: trivy image {{ ecr_repository_url }}:{{ image_tag }}
+  register: trivy_scan
+  changed_when: false
+  failed_when: trivy_scan.rc > 0
+
+- name: Update WAF rules (if enabled)
+  community.aws.wafv2_web_acl:
+    name: openstreetmap-waf
+    scope: REGIONAL
+    default_action: Allow
+    rules:
+      - name: RateLimitRule
+        priority: 1
+        statement:
+          rate_based_statement:
+            limit: 2000
+            aggregate_key_type: IP
+        action:
+          block: {}
+        visibility_config:
+          sampled_requests_enabled: yes
+          cloud_watch_metrics_enabled: yes
+          metric_name: RateLimitRule
+    region: "{{ aws_region }}"
+  when: enable_waf | default(false) | bool

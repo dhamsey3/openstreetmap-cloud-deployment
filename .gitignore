@@ -1,6 +1,12 @@
 .history
-.history
 
 # Terraform artifacts
 .terraform/
+*.tfstate
+*.tfstate.backup
 tf.plan
+.terraform.lock.hcl
+
+# Local env files
+.env
+.env.local

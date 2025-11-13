@@ -1,0 +1,54 @@
+---
+# Monitoring infrastructure setup with Prometheus and Grafana
+# This shows how to set up monitoring on EC2 instances
+
+- name: Install Docker
+  apt:
+    name: docker.io
+    state: present
+    update_cache: yes
+
+- name: Install Docker Compose
+  get_url:
+    url: "https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-linux-x86_64"
+    dest: /usr/local/bin/docker-compose
+    mode: '0755'
+
+- name: Create monitoring directory
+  file:
+    path: /opt/monitoring
+    state: directory
+    mode: '0755'
+
+- name: Deploy Prometheus config
+  template:
+    src: prometheus.yml.j2
+    dest: /opt/monitoring/prometheus.yml
+    mode: '0644'
+
+- name: Deploy Grafana dashboards
+  copy:
+    src: "{{ item }}"
+    dest: /opt/monitoring/grafana/dashboards/
+    mode: '0644'
+  with_fileglob:
+    - "../files/dashboards/*.json"
+
+- name: Deploy docker-compose for monitoring stack
+  template:
+    src: docker-compose.yml.j2
+    dest: /opt/monitoring/docker-compose.yml
+    mode: '0644'
+
+- name: Start monitoring services
+  community.docker.docker_compose_v2:
+    project_src: /opt/monitoring
+    state: present
+  register: monitoring_stack
+
+- name: Configure CloudWatch exporter
+  template:
+    src: cloudwatch-exporter.yml.j2
+    dest: /opt/monitoring/cloudwatch-exporter.yml
+    mode: '0644'
+  notify: restart monitoring

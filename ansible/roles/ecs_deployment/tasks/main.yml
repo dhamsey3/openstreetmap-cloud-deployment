@@ -1,0 +1,37 @@
+---
+# Ansible role for ECS deployment and management
+# This demonstrates what you can automate with Ansible for your ECS setup
+
+- name: Deploy new version to ECS
+  amazon.aws.ecs_service:
+    state: present
+    name: "{{ ecs_service_name }}"
+    cluster: "{{ ecs_cluster_name }}"
+    task_definition: "{{ task_definition_arn }}"
+    desired_count: "{{ desired_count | default(1) }}"
+    deployment_configuration:
+      maximum_percent: 200
+      minimum_healthy_percent: 100
+    force_new_deployment: "{{ force_deployment | default(false) }}"
+    region: "{{ aws_region }}"
+  register: ecs_deployment
+
+- name: Wait for ECS service to stabilize
+  amazon.aws.ecs_service_info:
+    cluster: "{{ ecs_cluster_name }}"
+    service: "{{ ecs_service_name }}"
+    region: "{{ aws_region }}"
+  register: service_info
+  until: service_info.services[0].deployments | length == 1
+  retries: 30
+  delay: 10
+
+- name: Get ECS task logs
+  community.aws.cloudwatchlogs_log_group_info:
+    log_group_name: "/ecs/openstreetmap-website"
+    region: "{{ aws_region }}"
+  register: logs_info
+
+- name: Display deployment status
+  debug:
+    msg: "Deployment {{ 'succeeded' if service_info.services[0].deployments | length == 1 else 'in progress' }}"

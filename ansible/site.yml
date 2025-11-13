@@ -1,0 +1,37 @@
+---
+# Main playbook for OpenStreetMap infrastructure management
+# Usage: ansible-playbook -i inventory.ini site.yml --tags <tag>
+
+- name: Configure monitoring infrastructure
+  hosts: monitoring
+  become: yes
+  tags: monitoring
+  roles:
+    - monitoring
+  
+- name: Database maintenance and backup tasks
+  hosts: localhost
+  connection: local
+  tags: database
+  roles:
+    - database_maintenance
+
+- name: Deploy application updates
+  hosts: localhost
+  connection: local
+  tags: deploy
+  roles:
+    - ecs_deployment
+
+- name: Security hardening
+  hosts: all
+  become: yes
+  tags: security
+  roles:
+    - security
+
+- name: Local development setup
+  hosts: local
+  tags: local-dev
+  roles:
+    - local_development

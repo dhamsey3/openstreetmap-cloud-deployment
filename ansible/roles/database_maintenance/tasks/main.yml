@@ -1,0 +1,73 @@
+---
+# Database maintenance tasks using Ansible
+# These can be scheduled via cron or run on-demand
+
+- name: Create RDS snapshot
+  amazon.aws.rds_instance_snapshot:
+    db_instance_identifier: openstreetmapdb
+    db_snapshot_identifier: "manual-snapshot-{{ ansible_date_time.iso8601_basic_short }}"
+    region: "{{ aws_region }}"
+    wait: yes
+  tags: backup
+
+- name: List old snapshots
+  amazon.aws.rds_snapshot_info:
+    db_instance_identifier: openstreetmapdb
+    snapshot_type: manual
+    region: "{{ aws_region }}"
+  register: snapshots
+  tags: cleanup
+
+- name: Delete snapshots older than 30 days
+  amazon.aws.rds_instance_snapshot:
+    db_snapshot_identifier: "{{ item.db_snapshot_identifier }}"
+    state: absent
+    region: "{{ aws_region }}"
+  loop: "{{ snapshots.snapshots }}"
+  when: 
+    - item.snapshot_create_time is defined
+    - (ansible_date_time.epoch | int) - (item.snapshot_create_time | to_datetime('%Y-%m-%dT%H:%M:%S.%f%z') | int) > 2592000
+  tags: cleanup
+
+- name: Check database disk space
+  amazon.aws.rds_instance_info:
+    db_instance_identifier: openstreetmapdb
+    region: "{{ aws_region }}"
+  register: db_info
+  tags: monitoring
+
+- name: Send alert if disk space is low
+  debug:
+    msg: "WARNING: Database allocated storage is {{ db_info.instances[0].allocated_storage }}GB"
+  when: db_info.instances[0].allocated_storage | int > 16
+  tags: monitoring
+
+- name: Rotate database credentials
+  block:
+    - name: Generate new password
+      set_fact:
+        new_db_password: "{{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}"
+    
+    - name: Update secret in Secrets Manager
+      community.aws.secretsmanager_secret:
+        name: openstreetmap/db_credentials
+        state: present
+        secret_type: string
+        secret: "{{ {'username': db_username, 'password': new_db_password, 'dbname': db_name} | to_json }}"
+        region: "{{ aws_region }}"
+    
+    - name: Modify RDS master password
+      amazon.aws.rds_instance:
+        db_instance_identifier: openstreetmapdb
+        master_user_password: "{{ new_db_password }}"
+        apply_immediately: yes
+        region: "{{ aws_region }}"
+    
+    - name: Restart ECS service to pick up new credentials
+      community.aws.ecs_service:
+        name: "{{ ecs_service_name }}"
+        cluster: "{{ ecs_cluster_name }}"
+        force_new_deployment: yes
+        region: "{{ aws_region }}"
+  tags: security, rotation
+  when: rotate_credentials | default(false) | bool

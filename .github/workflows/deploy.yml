@@ -1,9 +1,8 @@
 name: Deploy OpenStreetMap Website
 
+# Disabled: This workflow is replaced by ci-ecr-deploy.yml
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 jobs:
   deploy:

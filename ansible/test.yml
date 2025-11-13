@@ -1,0 +1,17 @@
+---
+# Simple test playbook to validate syntax
+# This is a minimal version for testing
+
+- name: Test playbook
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Check Python version
+      command: python3 --version
+      register: python_version
+      changed_when: false
+      
+    - name: Display Python version
+      debug:
+        msg: "{{ python_version.stdout }}"

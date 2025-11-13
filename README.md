@@ -147,7 +147,7 @@ REPO_NAME=$(terraform output -raw ecr_repository_url | cut -d'/' -f2)
 TAG=$(git rev-parse --short HEAD)
 
 aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com
-docker build -t ${REPO_NAME}:${TAG} -f openstreetmap-website/Dockerfile .
+docker build -t ${REPO_NAME}:${TAG} -f openstreetmap-website/Dockerfile openstreetmap-website
 docker tag ${REPO_NAME}:${TAG} ${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${REPO_NAME}:${TAG}
 docker push ${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${REPO_NAME}:${TAG}
 ```

@@ -1,0 +1,54 @@
+---
+# Ansible configuration for LocalStack
+# Test playbook that works with LocalStack
+
+- name: Test AWS operations with LocalStack
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  
+  vars:
+    aws_region: eu-central-1
+    localstack_endpoint: http://localhost:4566
+    
+  environment:
+    AWS_ACCESS_KEY_ID: test
+    AWS_SECRET_ACCESS_KEY: test
+    AWS_DEFAULT_REGION: "{{ aws_region }}"
+    AWS_ENDPOINT_URL: "{{ localstack_endpoint }}"
+    
+  tasks:
+    - name: Check LocalStack is running
+      uri:
+        url: "{{ localstack_endpoint }}/_localstack/health"
+        method: GET
+        return_content: yes
+      register: health_check
+      
+    - name: Display LocalStack services
+      debug:
+        msg: "LocalStack services: {{ health_check.json.services }}"
+        
+    - name: Create test S3 bucket
+      amazon.aws.s3_bucket:
+        name: test-localstack-bucket
+        state: present
+        region: "{{ aws_region }}"
+        endpoint_url: "{{ localstack_endpoint }}"
+      register: s3_result
+      
+    - name: Display S3 bucket creation result
+      debug:
+        msg: "S3 bucket created successfully!"
+      when: s3_result.changed
+      
+    - name: List S3 buckets
+      command: >
+        aws --endpoint-url={{ localstack_endpoint }} 
+        s3 ls
+      register: s3_list
+      changed_when: false
+      
+    - name: Display S3 buckets
+      debug:
+        msg: "{{ s3_list.stdout_lines }}"

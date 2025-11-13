@@ -31,6 +31,12 @@ variable "region" {
   default     = "eu-central-1"
 }
 
+variable "aws_region" {
+  description = "AWS region (alias for region variable)"
+  type        = string
+  default     = "eu-central-1"
+}
+
 variable "ecr_repo_name" {
   description = "ECR repository name for the application"
   type        = string
